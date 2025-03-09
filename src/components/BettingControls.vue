@@ -1,46 +1,41 @@
 <template>
   <div class="betting-controls">
-    <h3>Choose Your Bet</h3>
+    <h3 class="text-lg font-bold mb-3">Choose Your Bet</h3>
+
+    <!-- Show user balance -->
+    <p class="mb-2 font-bold text-green-700">Balance: ${{ balance }}</p>
 
     <div class="chip-container">
       <div v-for="chip in chips" :key="chip.value" class="chip-wrapper">
         <div class="chip" @click="addChip(chip.value)">
           <img :src="chip.image" :alt="'Chip ' + chip.value" />
+          <span v-if="selectedChips[chip.value]" class="chip-count">x{{ selectedChips[chip.value] }}</span>
         </div>
         <p class="chip-value">${{ chip.value }}</p>
       </div>
     </div>
 
-    <div class="bet-info">
-      <p>Current Bet: <span>${{ bet }}</span></p>
+    <div class="bet-info mt-4">
+      <p>Current Bet: <span class="text-lg font-bold">${{ bet }}</span></p>
       <button @click="resetBet" class="reset-btn">❌ Reset Bet</button>
     </div>
 
-    <button @click="confirmBet" :disabled="bet === 0">💰 Deal</button>
+    <button @click="confirmBet" :disabled="bet === 0 || bet > balance">💰 Deal</button>
 
-    <div class="stacked-chips">
-      <div v-for="(count, value) in chipStack" :key="value" class="stack">
-        <img :src="getChipImage(value)" class="stack-chip" />
-        <p>x{{ count }}</p>
-      </div>
-    </div>
+    <p v-if="bet > balance" class="text-red-600 text-sm font-bold mt-2">Not enough balance!</p>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, defineProps, defineEmits } from "vue";
+import { ref, defineProps, defineEmits } from "vue";
 
-// Define props
-const props = defineProps({
-  gameOver: Boolean,
-});
+// Receive balance from parent
+const props = defineProps({ balance: Number });
 
-// Define emits
 const emit = defineEmits(["betPlaced"]);
-
-// Reactive state
 const bet = ref(0);
-const chipStack = ref({});
+const selectedChips = ref({});
+
 const chips = ref([
   { value: 25, image: "/chips/greenChip.svg" },
   { value: 50, image: "/chips/blueChip.svg" },
@@ -49,31 +44,24 @@ const chips = ref([
   { value: 1000, image: "/chips/yellowChip.svg" },
 ]);
 
-// Watch for game over reset
-watch(() => props.gameOver, (newValue) => {
-  if (newValue) {
-    resetBet(); // Reset bet when game ends
-  }
-});
-
-// Methods
 const addChip = (value) => {
-  bet.value += value;
-
-  if (chipStack.value[value]) {
-    chipStack.value[value] += 1;
-  } else {
-    chipStack.value[value] = 1;
+  if (bet.value + value <= props.balance) {
+    bet.value += value;
+    if (!selectedChips.value[value]) {
+      selectedChips.value[value] = 1;
+    } else {
+      selectedChips.value[value]++;
+    }
   }
 };
 
 const resetBet = () => {
   bet.value = 0;
-  chipStack.value = {};
+  selectedChips.value = {}; // Reset selected chips
 };
 
 const confirmBet = async () => {
-  if (bet.value > 0) {
+  if (bet.value > 0 && bet.value <= props.balance) {
     await fetch("http://localhost:8080/api/players/1/bet", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,10 +70,6 @@ const confirmBet = async () => {
 
     emit("betPlaced", bet.value); // Emit betPlaced event
   }
-};
-
-const getChipImage = (value) => {
-  return chips.value.find(chip => chip.value === parseInt(value))?.image;
 };
 </script>
 
@@ -97,9 +81,11 @@ const getChipImage = (value) => {
 
 .chip-container {
   display: flex;
+  flex-wrap: wrap;
   gap: 15px;
   justify-content: center;
   align-items: center;
+  max-width: 400px;
 }
 
 .chip-wrapper {
@@ -107,6 +93,7 @@ const getChipImage = (value) => {
   flex-direction: column;
   align-items: center;
   cursor: pointer;
+  position: relative;
 }
 
 .chip {
@@ -121,17 +108,19 @@ const getChipImage = (value) => {
 .chip-value {
   margin-top: 5px;
   font-size: 14px;
+  font-weight: bold;
+}
+
+.chip-count {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: black;
   color: white;
+  font-size: 12px;
   font-weight: bold;
-}
-
-.bet-info {
-  margin-top: 15px;
-}
-
-.bet-info span {
-  font-weight: bold;
-  font-size: 18px;
+  padding: 2px 5px;
+  border-radius: 50%;
 }
 
 .reset-btn {
@@ -155,35 +144,5 @@ button {
 button:disabled {
   background-color: gray;
   cursor: not-allowed;
-}
-
-/* Stacked Chips Display */
-.stacked-chips {
-  display: flex;
-  justify-content: center;
-  margin-top: 10px;
-  gap: 10px;
-}
-
-.stack {
-  position: relative;
-  text-align: center;
-}
-
-.stack-chip {
-  width: 40px;
-}
-
-.stack p {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 16px;
-  color: white;
-  font-weight: bold;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 2px 5px;
-  border-radius: 5px;
 }
 </style>

@@ -23,7 +23,7 @@ export default {
 }
 .card {
   width: 200px;
-  height: 200;
+  height: 200px;
   border-radius: 5px;
 }
 </style>

@@ -1,22 +1,16 @@
 <template>
-  <div class="blackjack-table">
-    <!-- Show Player Setup if not registered -->
+  <div class="blackjack-table flex flex-col items-center justify-between min-h-screen overflow-hidden">
+    <!-- Player Setup -->
     <PlayerSetup v-if="!playerRegistered" @playerCreated="handlePlayerCreated" />
 
-    <!-- Show Betting Controls if game hasn't started -->
-    <BettingControls v-if="!gameStarted && playerRegistered" @betPlaced="handleBetPlaced" :gameOver="gameOver" />
-
-
     <!-- Main Game Area -->
-    <div v-if="gameStarted" class="game-area">
-      <!-- Dealer's Hand -->
+    <div v-if="gameStarted || gameOver" class="game-area flex flex-col items-center flex-grow w-full">
       <div class="dealer-area">
         <h3>Dealer</h3>
         <DealerCards :cards="dealerCards" />
       </div>
 
-      <!-- Game Info -->
-      <div class="game-info">
+      <div class="game-info bg-black bg-opacity-40 text-white p-4 rounded-lg w-full max-w-lg text-center">
         <h2>Balance: ${{ newBalance }}</h2>
         <h2>Current Bet: ${{ bet }}</h2>
         <h2>Winnings: ${{ winnings }}</h2>
@@ -25,25 +19,24 @@
         <h3 v-if="gameStatus">{{ gameStatus }}</h3>
       </div>
 
-
-      <!-- Player's Hand -->
-      <div class="player-area">
+      <div class="player-area mt-4">
         <h3>Player</h3>
         <PlayerCards :cards="playerCards" />
       </div>
 
-      <!-- Controls -->
-      <Controls v-if="gameStarted" @hit="hit" @stand="stand" @double="doubleDown" :gameOver="gameOver" />
-
-      <br />
-      <!-- Show Reset Button when the game is over -->
-      <button v-if="gameOver" @click="resetGame" class="reset-btn">🔄 Play Again</button>
-
-      <!-- Show results when game is over -->
-      <ResultsDisplay v-if="showResults" :resultMessage="gameStatus" :winnings="winnings" :newBalance="newBalance"
-        @playAgain="resetGame" />
-
+      <div v-if="gameStarted && !gameOver" class="game-controls flex gap-4 mt-4">
+        <Controls @hit="hit" @stand="stand" @double="doubleDown" />
+      </div>
     </div>
+
+    <!-- Betting Modal -->
+    <BettingModal :show="showBettingModal" :playerBalance="newBalance" @close="showBettingModal = false"
+      @betPlaced="handleBetPlaced" />
+
+    <!-- Game Controls -->
+    <button v-if="gameOver" @click="resetGame" class="reset-btn bg-orange-500 text-white px-6 py-3 rounded-lg mt-4">
+      🔄 Play Again
+    </button>
   </div>
 </template>
 
@@ -53,8 +46,7 @@ import DealerCards from "./DealerCards.vue";
 import PlayerCards from "./PlayerCards.vue";
 import Controls from "./Controls.vue";
 import PlayerSetup from "./PlayerSetup.vue";
-import BettingControls from "./BettingControls.vue";
-import ResultsDisplay from "./ResultsDisplay.vue";
+import BettingModal from "./BettingModal.vue";
 
 // Reactive state
 const playerRegistered = ref(false);
@@ -66,14 +58,18 @@ const playerScore = ref(0);
 const dealerScore = ref(0);
 const winnings = ref(0);
 const newBalance = ref(0);
+const showBettingModal = ref(false);
 
 // Computed properties
 const gameStarted = computed(() => gameStatus.value !== "Game not in session.");
-const gameOver = computed(() => ["Player wins!", "Dealer wins.", "Push", "Blackjack! Player Wins!"].includes(gameStatus.value));
+const gameOver = computed(() => ["Player wins!", "Dealer wins.", "It's a push!", "Blackjack! Player Wins!", "Bust! Dealer wins."].includes(gameStatus.value));
 
 // Lifecycle hook (runs on component mount)
 onMounted(async () => {
   await fetchPlayerInfo();
+  if (!gameStarted.value) {
+    showBettingModal.value = true; // Ensure betting modal appears on first load
+  }
 });
 
 // Fetch player info
@@ -104,52 +100,49 @@ const fetchPlayerBalance = async () => {
     if (!response.ok) throw new Error("Failed to fetch balance");
 
     const data = await response.json();
-    newBalance.value = data.balance; // ✅ Update balance in UI
+    newBalance.value = data.balance;
   } catch (error) {
     console.error("Error fetching balance:", error);
   }
 };
 
-
-
-
 // Fetch current hand
 const fetchCurrentHand = async () => {
-  const response = await fetch("http://localhost:8080/api/players/1/hand-value");
-  const data = await response.json();
+  try {
+    const response = await fetch("http://localhost:8080/api/players/1/hand-value");
+    if (!response.ok) throw new Error("Failed to fetch hand value");
 
-  playerScore.value = data.handValue;
-  dealerScore.value = data.dealerHandValue;
-
-  playerCards.value = formatCards(data.playerCards);
-  dealerCards.value = formatCards([data.dealerFaceUpCard]);
+    const data = await response.json();
+    playerScore.value = data.handValue;
+    dealerScore.value = data.dealerHandValue;
+    playerCards.value = formatCards(data.playerCards);
+    dealerCards.value = formatCards([data.dealerFaceUpCard]);
+  } catch (error) {
+    console.error("Error fetching hand:", error);
+  }
 };
 
 // Handle player creation
 const handlePlayerCreated = async () => {
   playerRegistered.value = true;
   await fetchPlayerInfo();
+  showBettingModal.value = true; // Ensure the betting modal opens
 };
 
 // Handle bet placement
 const handleBetPlaced = async (amount) => {
   bet.value = amount;
   gameStatus.value = "Bet placed! Waiting to start...";
+  showBettingModal.value = false; // Close modal after bet
   await deal();
 };
 
+// Deal cards to start the game
 const deal = async () => {
   if (bet.value === 0) {
     alert("You need to place a bet first!");
     return;
   }
-
-  // Reset UI for a new round
-  playerCards.value = [];
-  dealerCards.value = [];
-  playerScore.value = 0;
-  dealerScore.value = 0;
-  gameStatus.value = "Dealing cards...";
 
   try {
     const response = await fetch("http://localhost:8080/api/players/1/start", {
@@ -159,67 +152,75 @@ const deal = async () => {
     if (!response.ok) throw new Error("Failed to start game");
 
     const data = await response.json();
-
-    // Ensure UI updates correctly
     playerCards.value = formatCards(data.playerCards);
     dealerCards.value = formatCards([data.dealerFaceUpCard]);
     playerScore.value = data.handValue;
     dealerScore.value = data.dealerHandValue;
     gameStatus.value = "Game started!";
+    await fetchPlayerBalance();
   } catch (error) {
     console.error("Error starting game:", error);
     gameStatus.value = "Error starting game!";
   }
 };
 
-const fetchBalance = async () => {
+// Reset game function
+const resetGame = async () => {
   try {
-    const response = await fetch("http://localhost:8080/api/players/1/balance");
-    if (!response.ok) throw new Error("Failed to fetch balance");
+    await fetch("http://localhost:8080/api/players/1/reset", { method: "POST" });
 
-    const data = await response.json();
-    newBalance.value = data.balance;
+    // Reset all values
+    gameStatus.value = "Game not in session.";
+    bet.value = 0;
+    playerCards.value = [];
+    dealerCards.value = [];
+    playerScore.value = 0;
+    dealerScore.value = 0;
+    winnings.value = 0;
+    newBalance.value = 0;
+    playerRegistered.value = true;
+
+    await fetchPlayerInfo();
+    await fetchPlayerBalance();
+
+    // Ensure the betting modal appears again
+    showBettingModal.value = true;
   } catch (error) {
-    console.error("Error fetching balance:", error);
+    console.error("Error resetting game:", error);
   }
 };
 
-
+// Hit
 const hit = async () => {
-  if (gameOver.value) return; // Prevent hitting if the game is over
+  if (gameOver.value) return;
 
   try {
-    const response = await fetch("http://localhost:8080/api/players/1/hit", {
-      method: "POST",
-    });
-
+    const response = await fetch("http://localhost:8080/api/players/1/hit", { method: "POST" });
     if (!response.ok) throw new Error("Failed to hit");
+
 
     const data = await response.json();
     playerCards.value = formatCards(data.playerCards);
-    await fetchCurrentHand();
-    
+    playerScore.value = data.handValue;
     gameStatus.value = data.status;
-
+    if (playerScore.value > 21) {
+      dealerCards.value = formatCards(data.dealerHand);
+      dealerScore.value = data.dealerValue;
+      stand();
+    }
+    await fetchPlayerInfo();
     await fetchPlayerBalance();
-
   } catch (error) {
     console.error("Error hitting:", error);
-    gameStatus.value = "Error hitting!";
   }
 };
 
-
-
-
+// Stand
 const stand = async () => {
   if (gameOver.value) return;
 
   try {
-    const response = await fetch("http://localhost:8080/api/players/1/stand", {
-      method: "POST",
-    });
-
+    const response = await fetch("http://localhost:8080/api/players/1/stand", { method: "POST" });
     if (!response.ok) throw new Error("Failed to stand");
 
     const data = await response.json();
@@ -227,24 +228,18 @@ const stand = async () => {
     gameStatus.value = data.message;
     winnings.value = data.winnings;
     newBalance.value = data.playerNewBalance;
-
-    await fetchBalance();
+    dealerScore.value = data.dealerValue;
   } catch (error) {
     console.error("Error standing:", error);
-    gameStatus.value = "Error standing!";
   }
 };
 
-
-
+// Double Down
 const doubleDown = async () => {
   if (gameOver.value) return;
 
   try {
-    const response = await fetch("http://localhost:8080/api/players/1/double-down", {
-      method: "POST",
-    });
-
+    const response = await fetch("http://localhost:8080/api/players/1/double-down", { method: "POST" });
     if (!response.ok) throw new Error("Failed to double down");
 
     const data = await response.json();
@@ -254,38 +249,13 @@ const doubleDown = async () => {
     winnings.value = data.winnings;
     newBalance.value = data.playerNewBalance;
     bet.value = data.bet;
-
-    await fetchBalance();
+    dealerScore.value = data.dealerValue;
+    await fetchPlayerBalance();
   } catch (error) {
     console.error("Error doubling down:", error);
-    gameStatus.value = "Error doubling down!";
   }
 };
 
-
-
-
-
-// Reset game
-const resetGame = async () => {
-  await fetch("http://localhost:8080/api/players/1/reset", { method: "POST" });
-
-  gameStatus.value = "Game not in session.";
-  bet.value = 0;
-  playerCards.value = [];
-  dealerCards.value = [];
-  playerScore.value = 0;
-  dealerScore.value = 0;
-  winnings.value = 0;
-  newBalance.value = 0;
-  playerRegistered.value = true;
-
-  await fetchPlayerInfo();
-  await fetchPlayerBalance();
-};
-
-
-// Format card data
 const formatCards = (cards) =>
   cards.map((card) => ({
     rank: card.rank,
