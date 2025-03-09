@@ -1,3 +1,5 @@
+import Test from '@/components/Test.vue'
+import GameView from '@/components/GameView.vue'
 import { createRouter, createWebHistory } from 'vue-router'
 
 

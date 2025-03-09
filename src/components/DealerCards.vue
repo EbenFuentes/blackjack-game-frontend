@@ -1,20 +1,18 @@
 <template>
   <div class="dealer-cards">
-    <img v-for="(card, index) in cards" :key="index" :src="getCardImage(card)" class="card" />
+    <img 
+      v-for="(card, index) in cards" 
+      :key="index" 
+      :src="card.image" 
+      class="card" 
+      :alt="`${card.rank} of ${card.suit}`"
+    />
   </div>
 </template>
 
 <script>
 export default {
   props: ["cards"],
-  methods: {
-    getCardImage(card) {
-      if (!card || !card.rank || !card.suit) {
-        return "/cards/back.png";
-      }
-      return `/cards/${card.rank.toLowerCase()}_of_${card.suit.toLowerCase()}.png`;
-    },
-  },
 };
 </script>
 
@@ -23,10 +21,9 @@ export default {
   display: flex;
   gap: 10px;
 }
-
 .card {
-  width: 70px;
-  height: 100px;
+  width: 200px;
+  height: 200;
   border-radius: 5px;
 }
 </style>

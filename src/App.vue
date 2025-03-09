@@ -3,20 +3,19 @@ import { RouterView } from 'vue-router';
 </script>
 
 <template>
-  <div id="app">
+  <div id="app" class="flex  items-center justify-center bg-green-700 h-screen w-screen">
+
     <RouterView />
+
   </div>
 </template>
 
 <style>
-/* Full-screen casino background */
 #app {
+  min-height: 100vh;
+  min-width: 100vw;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  width: 100vw;
-  background-color: #0b6623;
-  padding: 20px;
 }
 </style>
